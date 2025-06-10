@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEngine;
@@ -13,38 +14,72 @@ namespace FairyGUIEditor
         [MenuItem("Tools/CompileScrip")]
         public static void CompileAndExport()
         {
-            
+
+            Log("CompileAndExport start");
             AssetDatabase.Refresh();
+            CompilationPipeline.compilationFinished += OnCompilationFinished;
             CompilationPipeline.RequestScriptCompilation();
-
-            EditorApplication.CallbackFunction delayCall = () =>
+            if (EditorApplication.isCompiling)
             {
-                Debug.Log("Script compilation completed!");
+                Task.Delay(2000).Wait();
+            }
+            Log("CompileAndExport end");
+        }
 
-                var assemblyPaths = CompilationPipeline.GetAssemblies()
-                    .Where(asm => asm.name.StartsWith("FairyGUI"))
-                    .Select(asm => asm.outputPath);
-                string outputDir = Path.Combine(Application.dataPath, "..", "Dlls");
-                if (!Directory.Exists(outputDir))
-                    Directory.CreateDirectory(outputDir);
-                if (assemblyPaths.Count() > 0)
+        private static void OnCompilationFinished(object obj)
+        {
+            Log("Script compilation finished");
+
+            CompilationPipeline.compilationFinished -= OnCompilationFinished;
+            var assemblyPaths = CompilationPipeline.GetAssemblies()
+                .Where(asm => asm.name.StartsWith("FairyGUI"))
+                .Select(asm => asm.outputPath);
+            string outputDir = Path.Combine(Application.dataPath, "..", "Dlls");
+            if (!Directory.Exists(outputDir))
+                Directory.CreateDirectory(outputDir);
+            if (assemblyPaths.Count() > 0)
+            {
+                foreach (string dllPath in assemblyPaths)
                 {
-                    foreach (string dllPath in assemblyPaths)
-                    {
-                        string name = Path.GetFileName(dllPath);
-                        string targetPath = Path.Combine(outputDir, name);
-                        Debug.Log($"Copy dll from [{dllPath}] to [{targetPath}]");
-                        File.Copy(dllPath, targetPath);
-                        Debug.Log("Done!");
-                    }
-                    Debug.Log("All done!");
+                    string name = Path.GetFileName(dllPath);
+                    string targetPath = Path.Combine(outputDir, name);
+                    Log($"Copy dll from [{dllPath}] to [{targetPath}]");
+                    File.Copy(dllPath, targetPath);
+                    Log("Done!");
                 }
-                else
-                {
-                    Debug.LogWarning("No assembly file matching!");
-                }
-            };
-            EditorApplication.delayCall += delayCall;
+                Log("All done!");
+            }
+            else
+            {
+                Warn("No assembly file matching!");
+            }
+
+            if (Application.isBatchMode)
+                EditorApplication.Exit(0);
+        }
+
+        private static void Log(string msg)
+        {
+            if (Application.isBatchMode)
+                System.Console.WriteLine(msg);
+            else
+                Debug.Log(msg);
+        }
+
+        private static void Warn(string msg)
+        {
+            if (Application.isBatchMode)
+                System.Console.WriteLine($"Warning:{msg}");
+            else
+                Debug.LogWarning(msg);
+        }
+
+        private static void Error(Exception exception)
+        {
+            if (Application.isBatchMode)
+                System.Console.Write($"Error:{exception.Message}[{exception.ToString()}]");
+            else
+                Debug.LogError($"Error:{exception.Message}[{exception.ToString()}]");
         }
     }
 }
